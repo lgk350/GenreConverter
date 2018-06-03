@@ -71,7 +71,7 @@ def interpolate(model, start_seq, end_seq, num_steps, max_length=32,
 
 def download(note_sequence, filename):
   mm.sequence_proto_to_midi_file(note_sequence, filename)
-  files.download(filename)
+  # files.download(filename)
 
 print 'Done setting up environment'
 
@@ -96,6 +96,12 @@ for ns in trio_16_samples:
 
 print 'Done playing samples'
 
+#@title Optionally download MIDI samples.
+print 'Downloading samples...'
+for i, ns in enumerate(trio_16_samples):
+  download(ns, './content/midi/%s_sample_%d.mid' % (trio_sample_model, i))
+print 'Finished downloading samples'
+
 #@title Option 1: Use example MIDI files for interpolation endpoints.
 print 'Using example MIDI files'
 input_trio_midi_data = [
@@ -105,6 +111,12 @@ input_trio_midi_data = [
 #@title Extract trios from MIDI files. This will extract all unique 16-bar trios using a sliding window with a stride of 1 bar.
 print 'Extracting trios...'
 trio_input_seqs = [mm.midi_to_sequence_proto(m) for m in input_trio_midi_data]
+
+# toy = trio_input_seqs[0]
+# print type(toy)
+# print toy
+# print hierdec_trio_16bar_config.data_converter.to_tensors(toy)[1]
+
 extracted_trios = []
 for ns in trio_input_seqs:
   extracted_trios.extend(
