@@ -4,7 +4,7 @@ from magenta.music.sequences_lib import concatenate_sequences
 from magenta.models.music_vae import configs
 from magenta.models.music_vae.trained_model import TrainedModel
 import numpy as np
-import os
+import os, time
 import tensorflow as tf
 
 
@@ -62,12 +62,21 @@ class AutoEncoder:
                 self.download(ns, './content/midi/%s_sample_%d.mid' % (trio_sample_model, i))
                 print 'Finished downloading samples'
 
-    def input_midi(self, genre):
+    def input_midi(self, input, single=False):
+        """Define the input to be used by the auto-encoder
+        Args:
+            input: string indicating a midi file (when single=True) or a genre directory (when single=False)"""
         print 'Defining input...'
-        input_path = './content/%s/*.mid' % genre
-        self.input_data = [
-            tf.gfile.Open(fn).read()
-            for fn in sorted(tf.gfile.Glob(input_path))]
+        if not single:
+            input_path = './content/%s/*.mid' % input
+            self.input_data = [
+                tf.gfile.Open(fn).read()
+                for fn in sorted(tf.gfile.Glob(input_path))]
+        if single:
+            input_path = './%s' % input
+            self.input_data = [
+                tf.gfile.Open(fn).read()
+                for fn in sorted(tf.gfile.Glob(input_path))]
 
     def extract_trios(self, config, download=False, genre='undefined'):
         """Extract trios and convert to notesequence
@@ -120,20 +129,55 @@ class AutoEncoder:
             self.m1 = mean_mu
         if store == 2:
             self.m2 = mean_mu
-        print 'type mean_mu:', type(mean_mu)
+
         output_sequence = model.decode(length=32, z=mean_mu, temperature=temperature)
-        print 'type output_sequence:', type(output_sequence)
 
         final_seq = concatenate_sequences(output_sequence, [32.0] * len(output_sequence))
-        print 'type final_sequence:', type(final_seq)
 
         self.download(final_seq, './content/output/%s_truemean.mid' % genre)
         print 'Mean %s acquired' % genre
 
-    def get_d(self):
+    def save_mean(self, mean, filename):
+        data = np.array(mean)
+        np.save(filename, data)
+        # f = open('save/output_seqs/%s.txt' % (filename + time.strftime("%Y%m%d")), 'w+')
+        # f.write(str(seq))
+        # f.close()
+        print "Saved output sequence to 'save/means/%s.npy'" % filename
+
+    def load_mean(self, filename, mean):
+        """Get a previously saved mean from a .npy file
+        Args:
+            filename: path to the .npy file of the mean
+            mean: string that can be either 's' (source genre) or 't' (target genre)
+            source and target are important since attribute vectors are always created from m1 to m2."""
+        if mean == "s":
+            self.m1 = np.load(filename)
+        elif mean == "t":
+            self.m2 = np.load(filename)
+        # f = open(filename, 'r')
+        # c = eval(f.read())
+        # f.close()
+
+    def compute_d(self):
         self.d = self.m2 - self.m1
 
-    def get_latent(self, extracted_trios, im='hierdec-trio_16bar', temperature=0.5, genre='undefined'):
+    def save_d(self, filename):
+        data = np.array(self.d)
+        np.save(filename, data)
+        # f = open('save/vectors/%s.txt' % filename, 'w+')
+        # f.write(str(self.d))
+        # f.close()
+        print "Saved output sequence to 'save/vectors/%s.npy'" % filename
+
+    def load_d(self, filename):
+        data = np.load(filename)
+        self.d = data.tolist()
+        # f = open(filename, 'r')
+        # self.d = eval(f.read())
+        # f.close()
+
+    def get_latent(self, extracted_trios, im='hierdec-trio_16bar'):
         print 'Getting latent vector...'
         model = self.trio_models[im]
         ph = np.zeros((1, 512))
@@ -146,13 +190,48 @@ class AutoEncoder:
                 print 'Encoding trio %d/%d' % (i, len(extracted_trios)-1)
             except:
                 print 'Cannot encode trio %d' % i
+        mean_mu = ph / counter
+
+        return mean_mu
+
+    def convert(self, latent_vector, cf, filename, im='hierdec-trio_16bar', temperature=0.5, length=32):
+        """Convert a song from genre X to genre Y
+        Args:
+            latent vector: latent vector of the song in X
+            cf: conversion factor - to what degree should X be converted to Y"""
+
+        new_lv = latent_vector + cf * self.d
+
+        model = self.trio_models[im]
+        output_sequence = model.decode(length=length, z=new_lv, temperature=temperature)
+
+        final_seq = concatenate_sequences(output_sequence)#, [64.0] * len(output_sequence)) ### Change 64 back to 32.0
+
+        self.download(final_seq, './content/output/converted_%s.mid' % filename)
+        print 'Convertion successful. converted_%s.mid created.' % filename
 
 
-genres = ['jazz', 'country']
+genres = ['jazz', 'metal']
 ae = AutoEncoder()
+
 for genre in genres:
     ae.input_midi(genre)
     trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
-# print 'default interpolation type:', type(ae.default_interpolation(ae.trio_models['hierdec-trio_16bar'],
-#                                      trios[0], trios[1]), './content/output/test_defint.mid')
     ae.get_mean(trios, 1, genre=genre)
+
+ae.input_midi(genres[0])
+trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
+ae.get_mean(trios, 1, genre=genres[0])
+
+ae.input_midi(genres[1])
+trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
+ae.get_mean(trios, 2, genre=genres[1])
+
+ae.compute_d()
+ae.save_d("%s2%s" % (genres[0], genres[1]))
+ae.load_d('%s2%s.npy' % (genres[0], genres[1]))
+# ae.input_midi('content/test/orpheus.mid', single=True)
+# trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
+# latent = ae.get_latent(trios)
+
+# ae.convert(latent, 1, '003')
