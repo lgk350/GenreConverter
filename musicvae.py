@@ -73,10 +73,12 @@ class AutoEncoder:
                 tf.gfile.Open(fn).read()
                 for fn in sorted(tf.gfile.Glob(input_path))]
         if single:
-            input_path = './%s' % input
-            self.input_data = [
-                tf.gfile.Open(fn).read()
-                for fn in sorted(tf.gfile.Glob(input_path))]
+            # files = sorted(tf.gfile.Glob(input))
+            # print files
+            # for file in files:
+            #     print file
+            #     self.input_data = [tf.gfile.Open(file).read()]
+            self.input_data = [tf.gfile.Open(input).read()]
 
     def extract_trios(self, config, download=False, genre='undefined'):
         """Extract trios and convert to notesequence
@@ -91,8 +93,8 @@ class AutoEncoder:
             try:
                 mns = mm.midi_to_sequence_proto(m)
                 seqs.append(mns)
-            except:
-                pass
+            except Exception, e:
+                print e
 
         extracted_trios = []
         for ns in seqs:
@@ -139,11 +141,11 @@ class AutoEncoder:
 
     def save_mean(self, mean, filename):
         data = np.array(mean)
-        np.save(filename, data)
+        np.save(filename + 'mean', data)
         # f = open('save/output_seqs/%s.txt' % (filename + time.strftime("%Y%m%d")), 'w+')
         # f.write(str(seq))
         # f.close()
-        print "Saved output sequence to 'save/means/%s.npy'" % filename
+        print "Saved output sequence to 'save/means/%smean.npy'" % filename
 
     def load_mean(self, filename, mean):
         """Get a previously saved mean from a .npy file
@@ -153,11 +155,10 @@ class AutoEncoder:
             source and target are important since attribute vectors are always created from m1 to m2."""
         if mean == "s":
             self.m1 = np.load(filename)
+            print self.m1
         elif mean == "t":
             self.m2 = np.load(filename)
-        # f = open(filename, 'r')
-        # c = eval(f.read())
-        # f.close()
+            print self.m2
 
     def compute_d(self):
         self.d = self.m2 - self.m1
@@ -207,31 +208,81 @@ class AutoEncoder:
 
         final_seq = concatenate_sequences(output_sequence)#, [64.0] * len(output_sequence)) ### Change 64 back to 32.0
 
-        self.download(final_seq, './content/output/converted_%s.mid' % filename)
-        print 'Convertion successful. converted_%s.mid created.' % filename
+        # self.download(final_seq, './content/evaluation/converted/converted_%s.mid' % filename)
+        self.download(final_seq, './content/Albert/output/%s.mid' % filename)
+        print 'Convertion successful. %s.mid created.' % filename
 
 
-genres = ['jazz', 'metal']
+# genres = ['rock', 'jazz']
+
 ae = AutoEncoder()
 
-for genre in genres:
-    ae.input_midi(genre)
-    trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
-    ae.get_mean(trios, 1, genre=genre)
+# for genre in genres:
+#     ae.input_midi(genre)
+#     trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
+#     ae.get_mean(trios, 1, genre=genre)
 
-ae.input_midi(genres[0])
-trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
-ae.get_mean(trios, 1, genre=genres[0])
+# genres = ['country', 'disco', 'pop', 'rock', 'reggae', 'metal', 'jazz']
+# for genre in genres:
+#     ae.input_midi(genre)
+#     trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
+#     ae.get_mean(trios, 1, genre=genre)
+#     ae.save_mean(ae.m1, genre)
 
-ae.input_midi(genres[1])
-trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
-ae.get_mean(trios, 2, genre=genres[1])
+# ae.input_midi(genres[1])
+# trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
+# ae.get_mean(trios, 2, genre=genres[1])
 
-ae.compute_d()
-ae.save_d("%s2%s" % (genres[0], genres[1]))
-ae.load_d('%s2%s.npy' % (genres[0], genres[1]))
+# ae.save_mean("t", genres[1])
+
+###############################
+# Generate conversion vectors #
+###############################
+# choices = ['country', 'disco', 'pop', 'rock', 'reggae', 'metal', 'jazz']
+# for i in choices:
+#     for j in choices:
+#         if i != j:
+#             print "computing d from %s to %s" % (i, j)
+#             genres = [i, j]
+#             ae.load_mean('save/means/%smean.npy' % i, "s")
+#             ae.load_mean('save/means/%smean.npy' % j, "t")
+#             ae.compute_d()
+#             ae.save_d("%s2%s" % (i, j))
+
+
+# ae.load_d('%s2%s.npy' % (genres[0], genres[1]))
 # ae.input_midi('content/test/orpheus.mid', single=True)
 # trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
 # latent = ae.get_latent(trios)
 
 # ae.convert(latent, 1, '003')
+
+# ae.load_d('save/vectors/rock2jazz.npy')
+
+# songs = os.listdir("content/output")
+# songs = os.listdir("content/test")
+# path = 'content/output'
+# path = 'content/test'
+# for song in songs:
+#     input = path + '/' + song
+#     ae.input_midi(input, single=True)
+#     trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
+#     latent = ae.get_latent(trios)
+#     ae.convert(latent, 1, song[:-4])
+
+path = 'content/Albert/amgc_set/'
+d_path = 'save/vectors/'
+genres = os.listdir(path)
+for genre in genres:
+    print "Working on genre ---%s---" % genre
+    songs = os.listdir(path + genre)
+    for i, song in enumerate(songs):
+        print "Converting song %d/%d six times" % (i + 1, len(songs))
+        x = genre
+        for y in genres:
+            if x != y:
+                ae.load_d('%s%s2%s.npy' % (d_path, x, y))
+                ae.input_midi(path + genre + '/' + song, single=True)
+                trios = ae.extract_trios(ae.configs['hierdec-trio_16bar'])
+                latent = ae.get_latent(trios)
+                ae.convert(latent, 1, "%s/%s_%s_%s" % (genre, song[:-5], x, y))
